@@ -13,6 +13,8 @@ export default function EditUser() {
         name: editUser.name,
         email: editUser.email,
         role: editUser.role,
+        is_approved: editUser.is_approved,
+        is_active: editUser.is_active,
         password: '',
         password_confirmation: '',
     });
@@ -89,6 +91,40 @@ export default function EditUser() {
                         </select>
                         {errors.role && <p className="text-sm text-destructive">{errors.role}</p>}
                     </div>
+
+                    {editUser.role !== 'admin' && (
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <label htmlFor="is_approved" className="text-sm font-medium">
+                                    Approval Status
+                                </label>
+                                <select
+                                    id="is_approved"
+                                    value={data.is_approved ? '1' : '0'}
+                                    onChange={(e) => setData('is_approved', e.target.value === '1')}
+                                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                >
+                                    <option value="1">Approved</option>
+                                    <option value="0">Pending</option>
+                                </select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label htmlFor="is_active" className="text-sm font-medium">
+                                    Active Status
+                                </label>
+                                <select
+                                    id="is_active"
+                                    value={data.is_active ? '1' : '0'}
+                                    onChange={(e) => setData('is_active', e.target.value === '1')}
+                                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                >
+                                    <option value="1">Active</option>
+                                    <option value="0">Inactive</option>
+                                </select>
+                            </div>
+                        </div>
+                    )}
 
                     <div className="space-y-2">
                         <label htmlFor="password" className="text-sm font-medium">

@@ -28,13 +28,21 @@ class UserController extends Controller
             $query->where('role', $role);
         }
 
+        if ($request->has('approved') && $request->input('approved') !== '') {
+            $query->where('is_approved', $request->boolean('approved'));
+        }
+
+        if ($request->has('active') && $request->input('active') !== '') {
+            $query->where('is_active', $request->boolean('active'));
+        }
+
         $perPage = in_array((int) $request->input('perPage'), [10, 15, 25, 50, 100]) ? (int) $request->input('perPage') : 10;
 
         $users = $query->orderBy('created_at', 'desc')->paginate($perPage)->withQueryString();
 
         return Inertia::render('admin/users/index', [
             'users' => $users,
-            'filters' => $request->only(['search', 'role', 'perPage']),
+            'filters' => $request->only(['search', 'role', 'perPage', 'approved', 'active']),
             'roles' => User::ROLES,
         ]);
     }
@@ -56,6 +64,7 @@ class UserController extends Controller
         ]);
 
         $validated['password'] = Hash::make($validated['password']);
+        $validated['is_approved'] = true;
 
         User::create($validated);
 
@@ -76,6 +85,8 @@ class UserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
             'role' => ['required', Rule::in(User::ROLES)],
+            'is_approved' => ['boolean'],
+            'is_active' => ['boolean'],
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
         ]);
 
@@ -83,6 +94,11 @@ class UserController extends Controller
             unset($validated['password']);
         } else {
             $validated['password'] = Hash::make($validated['password']);
+        }
+
+        // Prevent changing status of admin users
+        if ($user->isAdmin()) {
+            unset($validated['is_approved'], $validated['is_active']);
         }
 
         $user->update($validated);

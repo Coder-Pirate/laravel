@@ -1,21 +1,25 @@
-import { Head, usePage } from '@inertiajs/react';
-import { Shield, Users, UserCheck } from 'lucide-react';
+import { Head, Link, usePage } from '@inertiajs/react';
+import { Ban, Clock, Shield, Users, UserCheck } from 'lucide-react';
 
 type Stats = {
     totalUsers: number;
     totalAdmins: number;
     totalManagers: number;
     totalRegularUsers: number;
+    pendingApproval: number;
+    inactiveUsers: number;
 };
 
 export default function AdminDashboard() {
     const { stats } = usePage<{ stats: Stats }>().props;
 
     const cards = [
-        { title: 'Total Users', value: stats.totalUsers, icon: Users, color: 'text-blue-600 dark:text-blue-400' },
-        { title: 'Admins', value: stats.totalAdmins, icon: Shield, color: 'text-red-600 dark:text-red-400' },
-        { title: 'Managers', value: stats.totalManagers, icon: UserCheck, color: 'text-amber-600 dark:text-amber-400' },
-        { title: 'Users', value: stats.totalRegularUsers, icon: Users, color: 'text-green-600 dark:text-green-400' },
+        { title: 'Total Users', value: stats.totalUsers, icon: Users, color: 'text-blue-600 dark:text-blue-400', href: '/admin/users' },
+        { title: 'Admins', value: stats.totalAdmins, icon: Shield, color: 'text-red-600 dark:text-red-400', href: '/admin/users?role=admin' },
+        { title: 'Managers', value: stats.totalManagers, icon: UserCheck, color: 'text-amber-600 dark:text-amber-400', href: '/admin/users?role=manager' },
+        { title: 'Users', value: stats.totalRegularUsers, icon: Users, color: 'text-green-600 dark:text-green-400', href: '/admin/users?role=user' },
+        { title: 'Pending Approval', value: stats.pendingApproval, icon: Clock, color: 'text-orange-600 dark:text-orange-400', href: '/admin/users?approved=0' },
+        { title: 'Inactive Users', value: stats.inactiveUsers, icon: Ban, color: 'text-gray-600 dark:text-gray-400', href: '/admin/users?active=0' },
     ];
 
     return (
@@ -27,18 +31,19 @@ export default function AdminDashboard() {
                     <p className="text-muted-foreground">Overview of your application.</p>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {cards.map((card) => (
-                        <div
+                        <Link
                             key={card.title}
-                            className="rounded-xl border border-sidebar-border/70 bg-card p-6 dark:border-sidebar-border"
+                            href={card.href}
+                            className="rounded-xl border border-sidebar-border/70 bg-card p-6 transition-colors hover:bg-accent/50 dark:border-sidebar-border"
                         >
                             <div className="flex items-center justify-between">
                                 <p className="text-sm font-medium text-muted-foreground">{card.title}</p>
                                 <card.icon className={`h-5 w-5 ${card.color}`} />
                             </div>
                             <p className="mt-2 text-3xl font-bold">{card.value}</p>
-                        </div>
+                        </Link>
                     ))}
                 </div>
 

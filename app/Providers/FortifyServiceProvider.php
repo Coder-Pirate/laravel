@@ -27,6 +27,23 @@ class FortifyServiceProvider extends ServiceProvider
             public function toResponse($request)
             {
                 $user = $request->user();
+
+                // Block inactive users immediately
+                if (! $user->isAdmin() && ! $user->isActive()) {
+                    auth()->logout();
+                    $request->session()->invalidate();
+                    $request->session()->regenerateToken();
+
+                    return redirect()->route('login')->with('status', 'Your account has been deactivated. Please contact an administrator.');
+                }
+
+                // Admin is always approved
+                if (! $user->isAdmin() && ! $user->isApproved()) {
+                    return $request->wantsJson()
+                        ? response()->json(['two_factor' => false])
+                        : redirect()->route('approval.pending');
+                }
+
                 $url = match ($user->role) {
                     User::ROLE_ADMIN => '/admin/dashboard',
                     User::ROLE_MANAGER => '/manager/dashboard',
@@ -44,7 +61,7 @@ class FortifyServiceProvider extends ServiceProvider
             {
                 return $request->wantsJson()
                     ? response()->json(['two_factor' => false])
-                    : redirect()->intended('/user/dashboard');
+                    : redirect()->route('approval.pending');
             }
         });
     }

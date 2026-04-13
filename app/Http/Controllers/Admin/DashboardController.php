@@ -16,6 +16,8 @@ class DashboardController extends Controller
                 'totalAdmins' => \App\Models\User::where('role', 'admin')->count(),
                 'totalManagers' => \App\Models\User::where('role', 'manager')->count(),
                 'totalRegularUsers' => \App\Models\User::where('role', 'user')->count(),
+                'pendingApproval' => \App\Models\User::where('is_approved', false)->where('role', '!=', 'admin')->count(),
+                'inactiveUsers' => \App\Models\User::where('is_active', false)->where('role', '!=', 'admin')->count(),
             ],
         ]);
     }

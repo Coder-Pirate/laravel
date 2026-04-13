@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { Edit, FileSpreadsheet, FileText, Plus, Printer, Search, Trash2 } from 'lucide-react';
+import { Check, Edit, FileSpreadsheet, FileText, Plus, Power, PowerOff, Printer, Search, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     AlertDialog,
@@ -27,7 +27,7 @@ type PaginatedUsers = {
 
 type Props = {
     users: PaginatedUsers;
-    filters: { search?: string; role?: string; perPage?: string };
+    filters: { search?: string; role?: string; perPage?: string; approved?: string; active?: string };
     roles: string[];
 };
 
@@ -37,16 +37,35 @@ export default function UsersIndex() {
     const { users, filters, roles } = usePage<Props>().props;
     const [search, setSearch] = useState(filters.search || '');
     const [roleFilter, setRoleFilter] = useState(filters.role || '');
+    const [approvedFilter, setApprovedFilter] = useState(filters.approved ?? '');
+    const [activeFilter, setActiveFilter] = useState(filters.active ?? '');
     const [perPage, setPerPage] = useState(filters.perPage || '10');
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const isFirstRender = useRef(true);
     const [deleteUserId, setDeleteUserId] = useState<number | null>(null);
 
     useFlashToast();
 
+    // Sync local state when server-side filters change (e.g. navigating from dashboard)
+    const filtersKey = JSON.stringify(filters);
+    useEffect(() => {
+        setSearch(filters.search || '');
+        setRoleFilter(filters.role || '');
+        setApprovedFilter(filters.approved ?? '');
+        setActiveFilter(filters.active ?? '');
+        setPerPage(filters.perPage || '10');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filtersKey]);
+
     const fetchUsers = useCallback(
         (params: Record<string, string>) => {
-            router.get('/admin/users', params, {
+            // Only send non-empty params
+            const cleanParams: Record<string, string> = {};
+            for (const [key, value] of Object.entries(params)) {
+                if (value !== '') {
+                    cleanParams[key] = value;
+                }
+            }
+            router.get('/admin/users', cleanParams, {
                 preserveState: true,
                 preserveScroll: true,
                 replace: true,
@@ -55,11 +74,10 @@ export default function UsersIndex() {
         [],
     );
 
-    // Live search on type with debounce
+    // Debounced search only — fires 300ms after typing stops
     useEffect(() => {
-        if (isFirstRender.current) {
-            isFirstRender.current = false;
-
+        // Don't fetch on initial mount
+        if (search === (filters.search || '')) {
             return;
         }
 
@@ -68,7 +86,7 @@ export default function UsersIndex() {
         }
 
         debounceRef.current = setTimeout(() => {
-            fetchUsers({ search, role: roleFilter, perPage });
+            fetchUsers({ search, role: roleFilter, perPage, approved: approvedFilter, active: activeFilter });
         }, 300);
 
         return () => {
@@ -76,7 +94,21 @@ export default function UsersIndex() {
                 clearTimeout(debounceRef.current);
             }
         };
-    }, [search, roleFilter, perPage, fetchUsers]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [search]);
+
+    // Immediate fetch helper for dropdown changes
+    const applyFilters = (overrides: Partial<{ role: string; approved: string; active: string; perPage: string }>) => {
+        const next = {
+            search,
+            role: roleFilter,
+            perPage,
+            approved: approvedFilter,
+            active: activeFilter,
+            ...overrides,
+        };
+        fetchUsers(next);
+    };
 
     function handleDelete(userId: number) {
         setDeleteUserId(userId);
@@ -96,6 +128,27 @@ export default function UsersIndex() {
         user: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
     };
 
+    const approvalBadgeColors: Record<string, string> = {
+        approved: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+        pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+    };
+
+    function handleApprove(userId: number) {
+        router.post(`/admin/users/${userId}/approve`, {}, { preserveScroll: true });
+    }
+
+    function handleReject(userId: number) {
+        router.post(`/admin/users/${userId}/reject`, {}, { preserveScroll: true });
+    }
+
+    function handleActivate(userId: number) {
+        router.post(`/admin/users/${userId}/activate`, {}, { preserveScroll: true });
+    }
+
+    function handleDeactivate(userId: number) {
+        router.post(`/admin/users/${userId}/deactivate`, {}, { preserveScroll: true });
+    }
+
     function buildExportUrl(type: 'excel' | 'pdf') {
         const params = new URLSearchParams();
 
@@ -105,6 +158,14 @@ export default function UsersIndex() {
 
         if (roleFilter) {
             params.set('role', roleFilter);
+        }
+
+        if (approvedFilter !== '') {
+            params.set('approved', approvedFilter);
+        }
+
+        if (activeFilter !== '') {
+            params.set('active', activeFilter);
         }
 
         const query = params.toString();
@@ -168,23 +229,25 @@ export default function UsersIndex() {
     return (
         <>
             <Head title="Manage Users" />
-            <div className="flex h-full flex-1 flex-col gap-6 p-4">
-                <div className="flex items-center justify-between">
+            <div className="flex h-full flex-1 flex-col gap-4 p-4 sm:gap-6">
+                {/* Header */}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                        <h2 className="text-2xl font-bold tracking-tight">Users</h2>
-                        <p className="text-muted-foreground">Manage all user accounts.</p>
+                        <h2 className="text-xl font-bold tracking-tight sm:text-2xl">Users</h2>
+                        <p className="text-sm text-muted-foreground">Manage all user accounts.</p>
                     </div>
                     <Link
                         href="/admin/users/create"
-                        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 sm:w-auto"
                     >
                         <Plus className="h-4 w-4" />
                         Add User
                     </Link>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3">
-                    <div className="relative min-w-50 flex-1">
+                {/* Filters */}
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+                    <div className="relative col-span-2">
                         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <input
                             type="text"
@@ -196,7 +259,7 @@ export default function UsersIndex() {
                     </div>
                     <select
                         value={roleFilter}
-                        onChange={(e) => setRoleFilter(e.target.value)}
+                        onChange={(e) => { setRoleFilter(e.target.value); applyFilters({ role: e.target.value }); }}
                         className="rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                     >
                         <option value="">All Roles</option>
@@ -207,8 +270,26 @@ export default function UsersIndex() {
                         ))}
                     </select>
                     <select
+                        value={approvedFilter}
+                        onChange={(e) => { setApprovedFilter(e.target.value); applyFilters({ approved: e.target.value }); }}
+                        className="rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                        <option value="">All Status</option>
+                        <option value="1">Approved</option>
+                        <option value="0">Pending</option>
+                    </select>
+                    <select
+                        value={activeFilter}
+                        onChange={(e) => { setActiveFilter(e.target.value); applyFilters({ active: e.target.value }); }}
+                        className="rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                        <option value="">All Active</option>
+                        <option value="1">Active</option>
+                        <option value="0">Inactive</option>
+                    </select>
+                    <select
                         value={perPage}
-                        onChange={(e) => setPerPage(e.target.value)}
+                        onChange={(e) => { setPerPage(e.target.value); applyFilters({ perPage: e.target.value }); }}
                         className="rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                     >
                         {perPageOptions.map((n) => (
@@ -218,24 +299,24 @@ export default function UsersIndex() {
                         ))}
                     </select>
 
-                    <div className="flex gap-2 ml-auto">
+                    <div className="col-span-2 flex gap-2 sm:ml-auto">
                         <a
                             href={buildExportUrl('excel')}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-input px-3 py-2 text-sm font-medium hover:bg-accent"
+                            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-input px-3 py-2 text-sm font-medium hover:bg-accent sm:flex-none"
                         >
                             <FileSpreadsheet className="h-4 w-4 text-green-600" />
                             Excel
                         </a>
                         <a
                             href={buildExportUrl('pdf')}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-input px-3 py-2 text-sm font-medium hover:bg-accent"
+                            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-input px-3 py-2 text-sm font-medium hover:bg-accent sm:flex-none"
                         >
                             <FileText className="h-4 w-4 text-red-600" />
                             PDF
                         </a>
                         <button
                             onClick={handlePrint}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-input px-3 py-2 text-sm font-medium hover:bg-accent"
+                            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-input px-3 py-2 text-sm font-medium hover:bg-accent sm:flex-none"
                         >
                             <Printer className="h-4 w-4 text-blue-600" />
                             Print
@@ -243,34 +324,90 @@ export default function UsersIndex() {
                     </div>
                 </div>
 
-                <div className="overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-                    <table id="users-table" className="w-full text-sm">
+                {/* Table — horizontally scrollable on mobile */}
+                <div className="overflow-x-auto rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
+                    <table id="users-table" className="w-full min-w-[700px] text-sm">
                         <thead className="border-b bg-muted/50">
                             <tr>
-                                <th className="px-4 py-3 text-left font-medium">Name</th>
-                                <th className="px-4 py-3 text-left font-medium">Email</th>
-                                <th className="px-4 py-3 text-left font-medium">Role</th>
-                                <th className="px-4 py-3 text-left font-medium">Created</th>
-                                <th className="no-print px-4 py-3 text-right font-medium">Actions</th>
+                                <th className="whitespace-nowrap px-4 py-3 text-left font-medium">Name</th>
+                                <th className="whitespace-nowrap px-4 py-3 text-left font-medium">Email</th>
+                                <th className="whitespace-nowrap px-4 py-3 text-left font-medium">Role</th>
+                                <th className="whitespace-nowrap px-4 py-3 text-left font-medium">Status</th>
+                                <th className="whitespace-nowrap px-4 py-3 text-left font-medium">Created</th>
+                                <th className="no-print sticky right-0 whitespace-nowrap bg-muted/50 px-4 py-3 text-right font-medium">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y">
                             {users.data.map((user) => (
                                 <tr key={user.id} className="hover:bg-muted/30">
-                                    <td className="px-4 py-3 font-medium">{user.name}</td>
-                                    <td className="px-4 py-3 text-muted-foreground">{user.email}</td>
-                                    <td className="px-4 py-3">
+                                    <td className="whitespace-nowrap px-4 py-3 font-medium">{user.name}</td>
+                                    <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{user.email}</td>
+                                    <td className="whitespace-nowrap px-4 py-3">
                                         <span
                                             className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${roleBadgeColors[user.role] || ''}`}
                                         >
                                             {user.role}
                                         </span>
                                     </td>
-                                    <td className="px-4 py-3 text-muted-foreground">
+                                    <td className="whitespace-nowrap px-4 py-3">
+                                        <div className="flex gap-1">
+                                            {user.role === 'admin' ? (
+                                                <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${approvalBadgeColors.approved}`}>
+                                                    Approved
+                                                </span>
+                                            ) : (
+                                                <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${user.is_approved ? approvalBadgeColors.approved : approvalBadgeColors.pending}`}>
+                                                    {user.is_approved ? 'Approved' : 'Pending'}
+                                                </span>
+                                            )}
+                                            {user.role !== 'admin' && (
+                                                <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${user.is_active ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'}`}>
+                                                    {user.is_active ? 'Active' : 'Inactive'}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                                         {new Date(user.created_at).toLocaleDateString()}
                                     </td>
-                                    <td className="no-print px-4 py-3 text-right">
+                                    <td className="no-print sticky right-0 whitespace-nowrap bg-background px-4 py-3 text-right">
                                         <div className="flex items-center justify-end gap-2">
+                                            {user.role !== 'admin' && !user.is_approved && (
+                                                <button
+                                                    onClick={() => handleApprove(user.id)}
+                                                    title="Approve"
+                                                    className="inline-flex items-center rounded-md p-1.5 text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30"
+                                                >
+                                                    <Check className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                            {user.role !== 'admin' && user.is_approved && (
+                                                <button
+                                                    onClick={() => handleReject(user.id)}
+                                                    title="Revoke Approval"
+                                                    className="inline-flex items-center rounded-md p-1.5 text-yellow-600 hover:bg-yellow-100 dark:hover:bg-yellow-900/30"
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                            {user.role !== 'admin' && user.is_active && (
+                                                <button
+                                                    onClick={() => handleDeactivate(user.id)}
+                                                    title="Deactivate"
+                                                    className="inline-flex items-center rounded-md p-1.5 text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-900/30"
+                                                >
+                                                    <PowerOff className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                            {user.role !== 'admin' && !user.is_active && (
+                                                <button
+                                                    onClick={() => handleActivate(user.id)}
+                                                    title="Activate"
+                                                    className="inline-flex items-center rounded-md p-1.5 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-900/30"
+                                                >
+                                                    <Power className="h-4 w-4" />
+                                                </button>
+                                            )}
                                             <Link
                                                 href={`/admin/users/${user.id}/edit`}
                                                 className="inline-flex items-center rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -289,7 +426,7 @@ export default function UsersIndex() {
                             ))}
                             {users.data.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                                    <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                                         No users found.
                                     </td>
                                 </tr>
@@ -298,7 +435,8 @@ export default function UsersIndex() {
                     </table>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-4">
+                {/* Pagination */}
+                <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
                     <p className="text-sm text-muted-foreground">
                         {users.from && users.to
                             ? `Showing ${users.from} to ${users.to} of ${users.total} results`
@@ -306,7 +444,7 @@ export default function UsersIndex() {
                     </p>
 
                     {users.last_page > 1 && (
-                        <div className="flex gap-1">
+                        <div className="flex flex-wrap justify-center gap-1">
                             {users.links.map((link, i) => (
                                 <Link
                                     key={i}
